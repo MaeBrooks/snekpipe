@@ -3,13 +3,18 @@ class_name ScreenToMetricSpaceConverter
 
 const Absl = preload("./absl.gd")
 const Eigen = preload("./eigen.gd")
+const InputSource = preload("input_source.gd")
+const LandMarkList = preload("./land_mark_list.gd")
+const ProcrustesSolver = preload("./procrustes_solver.gd")
+const OriginPointLocation = preload("./origin_point_location.gd")
+const NormalizedLandmarkList = preload("./normalized_landmark_list.gd")
+const PerspectiveCameraFrustum = preload("./perspective_camera_frustum")
 
-const origin_point_location_: OriginPointLocation
-const input_source_: InputSource
-var canonical_metric_landmarks_: EigenMatrix3Xf
-var landmark_weights_: EigenVectorXf
+var origin_point_location_: OriginPointLocation
+var input_source_: InputSource
+var canonical_metric_landmarks_: Eigen.Matrix3Xf
+var landmark_weights_: Eigen.VectorXf
 var procrustes_solver_: ProcrustesSolver
-
 
 # TODO: Tests - How the hell do I test these?
 # TODO: refactor c++'s Operator overloading
@@ -82,10 +87,10 @@ func convert(
 	assert(screen_landmark_list.landmark_size() == canonical_metric_landmarks_.cols(), \
 		"The number of landmarks doesn't match the number passed upon initialization!")
 
-	var screen_landmarks Eigen.Matrix3Xf;
+	var screen_landmarks = Eigen.Matrix3Xf();
 	_ConvertLandmarkListToEigenMatrix(screen_landmark_list, screen_landmarks)
 
-	ProjectXY(pcf, screen_landmarks)
+	_ProjectXY(pcf, screen_landmarks)
     const depth_offset: float = screen_landmarks.row(2).mean()
 
     # 1st iteration: don't unproject XY because it's unsafe to do so due to
@@ -93,6 +98,9 @@ func convert(
     #                first estimation on the projected XY and use that scale to
     #                unproject for the 2nd iteration.
 	# TODO: Convert code
+	var intermediate_landmarks = Eigen.Matrix3Xf.copy(screen_landmarks)
+	_ChangeHandedness(intermediate_landmarks)
+
 	assert(false, "Is intermediate_landmarks a variable? is this short hand for " + \
 		"Eigen.Matrix3Xf intermediate_landmarks = new Eigen.Matrix3Xf(screen_landmarks)")
     # Eigen.Matrix3Xf intermediate_landmarks(screen_landmarks);
@@ -216,8 +224,8 @@ func convert(
 	# Absl.OkStatus
     return Absl.STATUS_OK
 
-func ProjectXY(
-		pcf PerspectiveCameraFrustum,
+func _ProjectXY(
+		pcf: PerspectiveCameraFrustum,
 		landmarks: Eigen.Matrix3Xf) -> void:
 	var x_scale: float = pcf.right - pcf.left;
 	var y_scale: float = pcf.top - pcf.bottom;
@@ -261,10 +269,10 @@ static func _UnprojectXY(
 		pcf: PerspectiveCameraFrustum,
 		landmarks: Eigen.Matrix3Xf) -> void:
     landmarks.row(0) = \
-        landmarks.row(0).cwiseProduct(landmarks.row(2)) / pcf.near;
+        Eisen.cwiseProduct(landmarks.row(0), landmarks.row(2)) / pcf.near;
 
     landmarks.row(1) = \
-        landmarks.row(1).cwiseProduct(landmarks.row(2)) / pcf.near;
+        Eisen.cwiseProduct(landmarks.row(1), landmarks.row(2)) / pcf.near;
 
 static func _ChangeHandedness(landmarks: Eigen.Matrix3Xf) -> void:
 	landmarks.row(2) *= float(-1)
@@ -272,14 +280,25 @@ static func _ChangeHandedness(landmarks: Eigen.Matrix3Xf) -> void:
 static func _ConvertLandmarkListToEigenMatrix(
 		landmark_list: NormalizedLandmarkList,
 		eigen_matrix: Eigen.Matrix3Xf) -> void:
-	eigen_matrix = Eigen.Matrix3Xf(3, landmark_list.landmark_size()) -> void:
+
+	assert(false, "TODO: verify that this is indeed that this is trying to do")
+	# Eigen.Matrix3Xf(3, landmark_list.landmark_size())
+	eigen_matrix = Eigen.Matrix3Xf()
+	var size = float(landmark_list.landmark_size())
+    eigen_matrix.row(0).set(Vector3(size, size, size))
+	eigen_matrix.row(1).set(Vector3(size, size, size))
+	eigen_matrix.row(2).set(Vector3(size, size, size))
+	# END ASSERT AREA
 
 	for i in range(landmark_list.landmark_size()):
 		var landmark = landmark_list.landmark(i)
-		# TODO: Propbably macro magic
-		eigen_matrix(0, i) = landmark.x()
-		eigen_matrix(1, i) = landmark.y()
-		eigen_matrix(2, i) = landmark.z()
+		assert(false, "TODO: verify that this is indeed that this is trying to do")
+		# eigen_matrix(0, i) = landmark.x()
+		# eigen_matrix(1, i) = landmark.y()
+		# eigen_matrix(2, i) = landmark.z()
+		eigen_matrix.row(0)[i] = landmark.x()
+		eigen_matrix.row(1)[i] = landmark.y()
+		eigen_matrix.row(2)[i] = landmark.z()
 
 static func _ConvertEigenMatrixToLandmarkList(
 		eigen_matrix: Eigen.Matrix3Xf,
@@ -288,7 +307,7 @@ static func _ConvertEigenMatrixToLandmarkList(
 
 	for i in range(eigen_matrix.cols()):
 		var landmark = landmark_list.add_landmark()
-		landmark.set_x(eigen_matrix(0, i));
-		landmark.set_y(eigen_matrix(1, i));
-		landmark.set_z(eigen_matrix(2, i));
+		landmark.set_x(eigen_matrix.get(0)[i);
+		landmark.set_y(eigen_matrix.get(1)[i]);
+		landmark.set_z(eigen_matrix.get(2)[i]);
 
